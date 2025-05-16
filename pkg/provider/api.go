@@ -18,9 +18,11 @@ type ApiProvider struct {
 	boot   func() *slack.Client
 	client *slack.Client
 
-	users      map[string]slack.User
-	usersCache string
+	users           map[string]slack.User
+	usersCache      string
+	disableUserCache bool
 }
+
 
 func New() *ApiProvider {
 	token := os.Getenv("SLACK_MCP_XOXC_TOKEN")
@@ -37,6 +39,9 @@ func New() *ApiProvider {
 	if cache == "" {
 		cache = ".users_cache.json"
 	}
+	
+	// Add environment variable to disable user caching
+	disableUserCache := os.Getenv("SLACK_MCP_DISABLE_USERS_CACHE") != ""
 
 	return &ApiProvider{
 		boot: func() *slack.Client {
@@ -57,8 +62,9 @@ func New() *ApiProvider {
 
 			return api
 		},
-		users:      make(map[string]slack.User),
-		usersCache: cache,
+		users:           make(map[string]slack.User),
+		usersCache:      cache,
+		disableUserCache: disableUserCache,
 	}
 }
 
@@ -76,6 +82,12 @@ func (ap *ApiProvider) Provide() (*slack.Client, error) {
 }
 
 func (ap *ApiProvider) bootstrapDependencies(ctx context.Context) error {
+	// Skip user caching if disabled
+	if ap.disableUserCache {
+		log.Printf("User caching is disabled via SLACK_MCP_DISABLE_USERS_CACHE")
+		return nil
+	}
+
 	if data, err := ioutil.ReadFile(ap.usersCache); err == nil {
 		var cachedUsers []slack.User
 		if err := json.Unmarshal(data, &cachedUsers); err != nil {
